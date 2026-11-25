@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>原創卡通風格都電 7514 — Three.js PBR 3D 場景</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #7ec0ee;
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hud-title {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(255, 252, 244, 0.86);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 9px 15px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(30, 45, 60, 0.14);
+      border: 2px solid rgba(255, 196, 36, 0.7);
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-title h1 {
+      font-size: 14px;
+      font-weight: 800;
+      color: #2b2d42;
+      letter-spacing: 0.5px;
+    }
+    .hud-title p {
+      font-size: 11px;
+      color: #5c677d;
+      margin-top: 2px;
+    }
+
+    /* 預設收合的情境選單切換鈕 */
+    .menu-toggle-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 252, 244, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: #2b2d42;
+      border: 2px solid rgba(245, 158, 11, 0.75);
+      border-radius: 16px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 22px rgba(20, 35, 50, 0.16);
+      z-index: 20;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .menu-toggle-btn:hover {
+      background: #fff3cd;
+      transform: translateY(-1px);
+    }
+
+    /* 情境選擇控制面板（預設收合） */
+    .controls-bar {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(0);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(255, 252, 244, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 10px 14px;
+      border-radius: 20px;
+      box-shadow: 0 10px 28px rgba(20, 35, 50, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.85);
+      z-index: 15;
+      max-width: 94vw;
+      opacity: 1;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .controls-bar.collapsed {
+      opacity: 0;
+      transform: translateX(-50%) translateY(24px);
+      pointer-events: none;
+    }
+
+    .btn {
+      border: none;
+      background: #f3efe6;
+      color: #2b2d42;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      background: #ffe184;
+      transform: translateY(-1px);
+    }
+    .btn.active {
+      background: #f59e0b;
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(245, 158, 11, 0.4);
+    }
+    .btn.depart-btn {
+      background: #16a34a;
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(22, 163, 74, 0.35);
+    }
+    .btn.depart-btn:hover {
+      background: #15803d;
+    }
+    .btn.depart-btn:disabled {
+      background: #94a3b8;
+      box-shadow: none;
+      cursor: default;
+      transform: none;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.168.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.168.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="hud-title">
+    <h1>🚃 都電 7514 號・南佐久間町</h1>
+    <p id="status-text">狀態：停靠月台待機中</p>
+  </div>
+
+  <button class="menu-toggle-btn" id="menu-toggle">⚙️ 情境選單</button>
+
+  <div class="controls-bar collapsed" id="controls-panel">
+    <button class="btn depart-btn" id="btn-depart">▶️ 啟動發車</button>
+    <button class="btn active" data-cam="default">經典斜角</button>
+    <button class="btn" data-cam="front">車頭排障器</button>
+    <button class="btn" data-cam="stop">站牌正側面</button>
+    <button class="btn" data-cam="bogie">轉向架特寫</button>
+    <button class="btn" id="toggle-panto">集電弓：升起</button>
+    <button class="btn active" id="toggle-anim">微動待機：開</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    // --- 1. 初始化渲染器、場景與相機 ---
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xd8ecff, 0.011);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    scene.environmentIntensity = 0.65;
+
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 160);
+    camera.position.set(-8.6, 3.4, 9.8);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(-0.9, 1.8, -0.1);
+    controls.minDistance = 3.8;
+    controls.maxDistance = 30;
+    controls.maxPolarAngle = Math.PI * 0.485;
+
+    // --- 2. 晴朗天空穹頂與午後陽光 ---
+    function createSkyDome() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0.0, '#3a86ff');
+      grad.addColorStop(0.45, '#7cc0ff');
+      grad.addColorStop(0.75, '#cde8ff');
+      grad.addColorStop(1.0, '#fff7e6');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 32, 256);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const sky = new THREE.Mesh(
+        new THREE.SphereGeometry(85, 24, 16),
+        new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, depthWrite: false })
+      );
+      scene.add(sky);
+    }
+    createSkyDome();
+
+    const hemiLight = new THREE.HemisphereLight(0xdff0ff, 0x6b705c, 0.78);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff3d6, 2.35);
+    sunLight.position.set(-14, 20, 14);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.near = 2;
+    sunLight.shadow.camera.far = 65;
+    const d = 18;
+    sunLight.shadow.camera.left = -d;
+    sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d;
+    sunLight.shadow.camera.bottom = -d;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    // --- 3. 程序化 Canvas 貼圖工具 ---
+    function makeCanvasTex(w, h, drawFn) {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      drawFn(ctx, w, h);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    const destTex = makeCanvasTex(512, 160, (ctx, w, h) => {
+      ctx.fillStyle = '#fffdf5';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(8, 8, w - 16, h - 16);
+      ctx.fillStyle = '#1d1e22';
+      ctx.font = 'bold 92px "Noto Serif TC", "Yu Mincho", serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('新    橋', w / 2, h / 2 + 4);
+    });
+
+    const frontNumTex = makeCanvasTex(256, 64, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#d62828';
+      ctx.font = 'bold 46px "Arial Rounded MT Bold", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('7 5 1 4', w / 2, h / 2);
+    });
+
+    const route6Tex = makeCanvasTex(220, 320, (ctx, w, h) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(6, 6, w - 12, h - 12, 24);
+      ctx.fill();
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#d0d5dd';
+      ctx.stroke();
+
+      ctx.fillStyle = '#d62828';
+      ctx.font = '900 138px "Arial Rounded MT Bold", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('6', w / 2, 92);
+
+      ctx.fillStyle = '#6ab04c';
+      ctx.beginPath();
+      ctx.ellipse(w / 2, 212, 54, 26, -0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#1f2937';
+      ctx.font = 'bold 21px sans-serif';
+      ctx.fillText('江戸東京たてもの園', w / 2, 272);
+    });
+
+    const stopWideFrontTex = makeCanvasTex(320, 720, (ctx, w, h) => {
+      ctx.fillStyle = '#8fa998';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.fillStyle = '#b91c1c';
+      ctx.beginPath();
+      ctx.ellipse(w / 2, 118, 126, 68, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 38px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('南佐久間町', w / 2, 118);
+
+      const panelX = 48;
+      const panelW = w - 96;
+      const panelY = 235;
+      const panelH = 445;
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(panelX, panelY, panelW, panelH);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 31px "Noto Sans TC", sans-serif';
+      const charsRight = ['江', '戸', '東', '京', 'た', 'て', 'も', 'の', '園'];
+      charsRight.forEach((ch, idx) => {
+        ctx.fillText(ch, w / 2 - 12, panelY + 38 + idx * 38);
+      });
+
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(panelX + panelW - 46, panelY + 12);
+      ctx.lineTo(panelX + panelW - 46, panelY + panelH - 58);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#475569';
+      ctx.strokeRect(panelX + 12, panelY + panelH - 50, panelW - 24, 38);
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText('TEL 042-388-3300', w / 2, panelY + panelH - 31);
+    });
+
+    const stopNarrowSideTex = makeCanvasTex(160, 720, (ctx, w, h) => {
+      ctx.fillStyle = '#8fa998';
+      ctx.fillRect(0, 0, w, h);
+
+      const boxX = 24;
+      const boxW = w - 48;
+      const boxY = 225;
+      const boxH = 455;
+
+      ctx.fillStyle = '#b91c1c';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#fca5a5';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX + 3, boxY + 3, boxW - 6, boxH - 6);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 56px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const charsLeft = ['南', '佐', '久', '間', '町'];
+      charsLeft.forEach((ch, idx) => {
+        ctx.fillText(ch, w / 2, boxY + 56 + idx * 84);
+      });
+    });
+
+    const hazardTex = makeCanvasTex(512, 256, (ctx, w, h) => {
+      ctx.fillStyle = '#e5dfd3';
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 240; i++) {
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(130,115,95,0.18)' : 'rgba(255,255,255,0.25)';
+        ctx.beginPath();
+        ctx.arc(Math.random() * w, Math.random() * h, 4 + Math.random() * 14, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, h * 0.44, w, h * 0.56);
+      ctx.clip();
+      ctx.fillStyle = '#f4a21d';
+      ctx.fillRect(0, h * 0.44, w, h * 0.56);
+      ctx.fillStyle = '#1e2229';
+      for (let x = -h; x < w + h; x += 64) {
+        ctx.beginPath();
+        ctx.moveTo(x, h);
+        ctx.lineTo(x + 32, h);
+        ctx.lineTo(x + 32 + h * 0.65, h * 0.38);
+        ctx.lineTo(x + h * 0.65, h * 0.38);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
+    const copperPatinaTex = makeCanvasTex(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#4a7c74';
+      ctx.fillRect(0, 0, w, h);
+      const colors = ['#38665f', '#5d9389', '#7aa899', '#8c6d53', '#3b5249'];
+      for (let y = 0; y < h; y += 32) {
+        for (let x = 0; x < w; x += 48) {
+          ctx.fillStyle = colors[(x + y + Math.floor(Math.random() * 5)) % colors.length];
+          ctx.globalAlpha = 0.55;
+          ctx.fillRect(x + 2, y + 2, 44, 28);
+        }
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    // --- 4. 共用 PBR 材質庫 ---
+    const matTramYellow = new THREE.MeshPhysicalMaterial({
+      color: 0xf7a81b,
+      roughness: 0.28,
+      metalness: 0.06,
+      clearcoat: 0.65,
+      clearcoatRoughness: 0.22
+    });
+
+    const matTramRed = new THREE.MeshPhysicalMaterial({
+      color: 0xd62828,
+      roughness: 0.3,
+      metalness: 0.05,
+      clearcoat: 0.6
+    });
+
+    const matChrome = new THREE.MeshStandardMaterial({
+      color: 0xe8edf2,
+      roughness: 0.18,
+      metalness: 0.88
+    });
+
+    const matSteelDark = new THREE.MeshStandardMaterial({
+      color: 0x3f4754,
+      roughness: 0.48,
+      metalness: 0.62
+    });
+
+    const matBogieGrey = new THREE.MeshStandardMaterial({
+      color: 0x8e99a8,
+      roughness: 0.46,
+      metalness: 0.45
+    });
+
+    const matRubber = new THREE.MeshStandardMaterial({
+      color: 0x262930,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+
+    const matGlass = new THREE.MeshPhysicalMaterial({
+      color: 0xdbeafe,
+      roughness: 0.08,
+      metalness: 0.05,
+      transmission: 0.72,
+      transparent: true,
+      opacity: 0.85,
+      ior: 1.48
+    });
+
+    // --- 5. 建立地面、軌道與左側候車月台島 ---
+    function buildGroundAndTracks() {
+      const envGroup = new THREE.Group();
+
+      const road = new THREE.Mesh(
+        new THREE.BoxGeometry(68, 0.4, 42),
+        new THREE.MeshStandardMaterial({ color: 0x4b525c, roughness: 0.88 })
+      );
+      road.position.set(0, -0.2, -2);
+      road.receiveShadow = true;
+      envGroup.add(road);
+
+      const trackBed = new THREE.Mesh(
+        new THREE.BoxGeometry(68, 0.12, 3.6),
+        new THREE.MeshStandardMaterial({ color: 0x8d959e, roughness: 0.82 })
+      );
+      trackBed.position.set(0, 0.06, 0.5);
+      trackBed.receiveShadow = true;
+      envGroup.add(trackBed);
+
+      [-0.72, 0.72].forEach((zOffset) => {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(68, 0.12, 0.09),
+          matChrome
+        );
+        rail.position.set(0, 0.15, 0.5 + zOffset);
+        rail.castShadow = true;
+        rail.receiveShadow = true;
+        envGroup.add(rail);
+      });
+
+      const tieMat = new THREE.MeshStandardMaterial({ color: 0x5c4d3c, roughness: 0.9 });
+      for (let x = -32; x <= 32; x += 0.85) {
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 2.2), tieMat);
+        tie.position.set(x, 0.11, 0.5);
+        tie.receiveShadow = true;
+        envGroup.add(tie);
+      }
+
+      const island = new THREE.Mesh(
+        new THREE.BoxGeometry(11.5, 0.28, 2.2),
+        new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.75 })
+      );
+      island.position.set(-4.2, 0.14, -2.15);
+      island.receiveShadow = true;
+      island.castShadow = true;
+      envGroup.add(island);
+
+      const yellowCurb = new THREE.Mesh(
+        new THREE.BoxGeometry(11.56, 0.26, 0.24),
+        new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.62 })
+      );
+      yellowCurb.position.set(-4.2, 0.15, -1.08);
+      yellowCurb.receiveShadow = true;
+      envGroup.add(yellowCurb);
+
+      scene.add(envGroup);
+    }
+    buildGroundAndTracks();
+
+    // --- 6. 建立原創卡通比例都電 7514（低重心貼地＋車體遮蔽輪架上半部） ---
+    const STOP_POS_X = 0.9;
+    const tramGroup = new THREE.Group();
+    tramGroup.position.set(STOP_POS_X, 0.21, 0.5);
+    scene.add(tramGroup);
+
+    const bodyGroup = new THREE.Group();
+    tramGroup.add(bodyGroup);
+
+    let pantographUpperGroup = null;
+    let pantographLowerGroup = null;
+    const wheelMeshes = [];
+    const headlightBulbs = [];
+
+    function createRoundedRectShape(length, width, radius) {
+      const s = new THREE.Shape();
+      const hl = length / 2;
+      const hw = width / 2;
+      const r = radius;
+      s.moveTo(-hl + r, -hw);
+      s.lineTo(hl - r, -hw);
+      s.quadraticCurveTo(hl, -hw, hl, -hw + r);
+      s.lineTo(hl, hw - r);
+      s.quadraticCurveTo(hl, hw, hl - r, hw);
+      s.lineTo(-hl + r, hw);
+      s.quadraticCurveTo(-hl, hw, -hl, hw - r);
+      s.lineTo(-hl, -hw + r);
+      s.quadraticCurveTo(-hl, -hw, -hl + r, -hw);
+      return s;
+    }
+
+    function buildCartoonTram() {
+      const L = 8.4;   // 車長 (X軸，車頭朝 -X)
+      const W = 2.48;  // 車寬 (Z軸)
+      const hl = L / 2;
+      const hw = W / 2;
+
+      // 1) 中央高架底盤（隱藏於輪拱頂緣上方 y = 0.68）
+      const chassis = new THREE.Mesh(
+        new THREE.BoxGeometry(L - 0.5, 0.2, W - 0.48),
+        matSteelDark
+      );
+      chassis.position.set(0, 0.68, 0);
+      chassis.castShadow = true;
+      bodyGroup.add(chassis);
+
+      // 2) 兩組轉向架（Bogies：高度 0 ~ 0.64，上半部被車身外裙遮蔽，下半部外露）
+      const WHEEL_RADIUS = 0.26;
+      [-2.35, 2.35].forEach((bx) => {
+        const bogie = new THREE.Group();
+        bogie.position.set(bx, WHEEL_RADIUS, 0);
+
+        const centerBlock = new THREE.Mesh(
+          new THREE.BoxGeometry(1.46, 0.34, 1.84),
+          matBogieGrey
+        );
+        centerBlock.position.y = 0.22;
+        centerBlock.castShadow = true;
+        bogie.add(centerBlock);
+
+        [-0.95, 0.95].forEach((sz) => {
+          const sideBeam = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 0.22, 0.14),
+            matBogieGrey
+          );
+          sideBeam.position.set(0, 0.24, sz);
+          sideBeam.castShadow = true;
+          bogie.add(sideBeam);
+
+          const bolster = new THREE.Mesh(
+            new THREE.BoxGeometry(0.46, 0.36, 0.18),
+            new THREE.MeshStandardMaterial({ color: 0xa3aebd, roughness: 0.4, metalness: 0.5 })
+          );
+          bolster.position.set(0, 0.18, sz + (sz > 0 ? 0.03 : -0.03));
+          bogie.add(bolster);
+
+          [-0.12, 0.12].forEach((sx) => {
+            const spring = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.075, 0.075, 0.24, 12),
+              matSteelDark
+            );
+            spring.position.set(sx, 0.12, sz + (sz > 0 ? 0.06 : -0.06));
+            bogie.add(spring);
+          });
+
+          [-0.54, 0.54].forEach((ax) => {
+            const journalBox = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.105, 0.105, 0.18, 14),
+              matBogieGrey
+            );
+            journalBox.rotation.x = Math.PI / 2;
+            journalBox.position.set(ax, 0.04, sz + (sz > 0 ? 0.04 : -0.04));
+            bogie.add(journalBox);
+          });
+        });
+
+        [-0.54, 0.54].forEach((wx) => {
+          [-0.74, 0.74].forEach((wz) => {
+            const wheel = new THREE.Mesh(
+              new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.11, 22),
+              matChrome
+            );
+            wheel.rotation.x = Math.PI / 2;
+            wheel.position.set(wx, 0, wz);
+            wheel.castShadow = true;
+            bogie.add(wheel);
+            wheelMeshes.push(wheel);
+          });
+        });
+
+        tramGroup.add(bogie);
+      });
+
+      // 3) 低重心車身下半部：
+      // 輪拱上緣降至 y = 0.66（遮蔽轉向架 y = 0.34 ~ 0.66 的上半部！）
+      // 下層裙板底部降至 y = 0.34（貼近軌道，僅留約 13cm 離地間隙）
+      const fullShape = createRoundedRectShape(L, W, 0.36);
+
+      // 上層連續圍板（y = 0.66 ~ 1.44，向下延伸遮住輪架組上半部）
+      const upperWaistGeo = new THREE.ExtrudeGeometry(fullShape, {
+        depth: 0.78,
+        bevelEnabled: true,
+        bevelThickness: 0.03,
+        bevelSize: 0.04,
+        bevelSegments: 3
+      });
+      upperWaistGeo.rotateX(-Math.PI / 2);
+      const upperWaist = new THREE.Mesh(upperWaistGeo, matTramYellow);
+      upperWaist.position.y = 0.66;
+      upperWaist.castShadow = true;
+      upperWaist.receiveShadow = true;
+      bodyGroup.add(upperWaist);
+
+      // 下層低裙板分三段（y = 0.34 ~ 0.66，讓轉向架下半部清晰露出）
+      const skirtSegments = [
+        { xStart: -hl, xEnd: -3.18, roundFront: true, roundRear: false },
+        { xStart: -1.52, xEnd: 1.52, roundFront: false, roundRear: false },
+        { xStart: 3.18, xEnd: hl, roundFront: false, roundRear: true }
+      ];
+
+      skirtSegments.forEach((seg) => {
+        const segLen = seg.xEnd - seg.xStart;
+        const segCenterX = (seg.xStart + seg.xEnd) / 2;
+        const s = new THREE.Shape();
+        const sl = segLen / 2;
+        const rF = seg.roundFront ? 0.36 : 0.03;
+        const rR = seg.roundRear ? 0.36 : 0.03;
+
+        s.moveTo(-sl + rF, -hw);
+        s.lineTo(sl - rR, -hw);
+        s.quadraticCurveTo(sl, -hw, sl, -hw + rR);
+        s.lineTo(sl, hw - rR);
+        s.quadraticCurveTo(sl, hw, sl - rR, hw);
+        s.lineTo(-sl + rF, hw);
+        s.quadraticCurveTo(-sl, hw, -sl, hw - rF);
+        s.lineTo(-sl, -hw + rF);
+        s.quadraticCurveTo(-sl, -hw, -sl + rF, -hw);
+
+        const skirtGeo = new THREE.ExtrudeGeometry(s, {
+          depth: 0.32,
+          bevelEnabled: true,
+          bevelThickness: 0.02,
+          bevelSize: 0.038,
+          bevelSegments: 3
+        });
+        skirtGeo.rotateX(-Math.PI / 2);
+        const skirtMesh = new THREE.Mesh(skirtGeo, matTramYellow);
+        skirtMesh.position.set(segCenterX, 0.34, 0);
+        skirtMesh.castShadow = true;
+        skirtMesh.receiveShadow = true;
+        bodyGroup.add(skirtMesh);
+      });
+
+      // 輪拱上緣飾條（位於 y = 0.65，強化外殼遮蓋輪架上半部的輪廓線）
+      [-2.35, 2.35].forEach((bx) => {
+        [-hw - 0.015, hw + 0.015].forEach((wz) => {
+          const archTrim = new THREE.Mesh(
+            new THREE.BoxGeometry(1.68, 0.045, 0.06),
+            matTramYellow
+          );
+          archTrim.position.set(bx, 0.65, wz);
+          bodyGroup.add(archTrim);
+        });
+      });
+
+      // 4) 經典紅色腰帶條紋（隨車身整體下移至 y = 1.44）
+      const stripeGeo = new THREE.ExtrudeGeometry(fullShape, {
+        depth: 0.19,
+        bevelEnabled: true,
+        bevelThickness: 0.015,
+        bevelSize: 0.048,
+        bevelSegments: 2
+      });
+      stripeGeo.rotateX(-Math.PI / 2);
+      const redStripe = new THREE.Mesh(stripeGeo, matTramRed);
+      redStripe.position.y = 1.44;
+      redStripe.castShadow = true;
+      bodyGroup.add(redStripe);
+
+      // 5) 上半部窗框與內裝（y = 1.63 ~ 2.91）
+      buildUpperCabinWithWindows(L, W);
+
+      // 6) 圓潤卡通弧形車頂（y = 2.91）
+      const roofGeo = new THREE.ExtrudeGeometry(fullShape, {
+        depth: 0.26,
+        bevelEnabled: true,
+        bevelThickness: 0.16,
+        bevelSize: 0.06,
+        bevelSegments: 6
+      });
+      roofGeo.rotateX(-Math.PI / 2);
+      const roof = new THREE.Mesh(roofGeo, matTramYellow);
+      roof.position.y = 2.91;
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      bodyGroup.add(roof);
+
+      // 7) 車頭細節
+      buildFrontFaceDetails(-hl, W);
+
+      // 8) 車身側面細節
+      buildSideDetails(L, W);
+
+      // 9) 車頂通風器與菱形集電弓
+      buildRoofAndPantograph();
+    }
+
+    function buildUpperCabinWithWindows(L, W) {
+      const hl = L / 2;
+      const hw = W / 2;
+      const baseY = 1.63;
+      const topY = 2.91;
+      const h = topY - baseY;
+
+      const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(L - 0.5, 0.08, W - 0.35),
+        new THREE.MeshStandardMaterial({ color: 0x8d5b4c, roughness: 0.8 })
+      );
+      floor.position.y = 0.88;
+      bodyGroup.add(floor);
+
+      const seatMat = new THREE.MeshStandardMaterial({ color: 0x2b59c3, roughness: 0.75 });
+      [-0.75, 0.75].forEach((sz) => {
+        const bench = new THREE.Mesh(new THREE.BoxGeometry(L - 2.2, 0.35, 0.42), seatMat);
+        bench.position.set(0, 1.1, sz);
+        bodyGroup.add(bench);
+      });
+
+      const cabinLight = new THREE.PointLight(0xffdfb0, 1.6, 6);
+      cabinLight.position.set(0, 2.5, 0);
+      bodyGroup.add(cabinLight);
+
+      [-hw + 0.04, hw - 0.04].forEach((zPos) => {
+        const glassPane = new THREE.Mesh(
+          new THREE.BoxGeometry(L - 0.85, h - 0.14, 0.04),
+          matGlass
+        );
+        glassPane.position.set(0, baseY + h / 2, zPos);
+        bodyGroup.add(glassPane);
+
+        const transomBar = new THREE.Mesh(
+          new THREE.BoxGeometry(L - 0.8, 0.07, 0.09),
+          matTramYellow
+        );
+        transomBar.position.set(0, baseY + h * 0.68, zPos);
+        bodyGroup.add(transomBar);
+
+        const pillarXs = [-3.65, -2.95, -2.15, -1.35, -0.55, 0.25, 1.05, 1.85, 2.65, 3.45];
+        pillarXs.forEach((px, idx) => {
+          const isDoorFrame = idx === 0 || idx === 1 || idx === 8 || idx === 9;
+          const pillar = new THREE.Mesh(
+            new THREE.BoxGeometry(isDoorFrame ? 0.13 : 0.1, h, 0.11),
+            matTramYellow
+          );
+          pillar.position.set(px, baseY + h / 2, zPos);
+          pillar.castShadow = true;
+          bodyGroup.add(pillar);
+        });
+
+        // 車門下半部延伸門板（低重心同步下調）
+        [-3.3, 3.05].forEach((dx) => {
+          const doorPanel = new THREE.Mesh(
+            new THREE.BoxGeometry(0.66, 1.16, 0.08),
+            matTramYellow
+          );
+          doorPanel.position.set(dx, 1.02, zPos + (zPos > 0 ? 0.02 : -0.02));
+          bodyGroup.add(doorPanel);
+        });
+      });
+
+      [-1, 1].forEach((dir) => {
+        const xFace = dir * (hl - 0.04);
+
+        const frontGlass = new THREE.Mesh(
+          new THREE.BoxGeometry(0.05, h - 0.16, W - 0.72),
+          matGlass
+        );
+        frontGlass.position.set(xFace, baseY + h / 2, 0);
+        bodyGroup.add(frontGlass);
+
+        [-0.92, -0.56, 0.56, 0.92].forEach((pz) => {
+          const vBar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.11, h, 0.09),
+            matTramYellow
+          );
+          vBar.position.set(xFace, baseY + h / 2, pz);
+          bodyGroup.add(vBar);
+        });
+
+        [baseY + h * 0.22, baseY + h * 0.76].forEach((hy) => {
+          const hBar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.06, 1.12),
+            matTramYellow
+          );
+          hBar.position.set(xFace, hy, 0);
+          bodyGroup.add(hBar);
+        });
+      });
+    }
+
+    function buildFrontFaceDetails(frontX, W) {
+      const fGroup = new THREE.Group();
+      fGroup.position.set(frontX - 0.04, 0, 0);
+      bodyGroup.add(fGroup);
+
+      // 1) 「新 橋」方向幕燈箱
+      const destBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.42, 1.26),
+        matTramYellow
+      );
+      destBox.position.set(-0.04, 3.11, 0);
+      destBox.castShadow = true;
+      fGroup.add(destBox);
+
+      const destSign = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.08, 0.31),
+        new THREE.MeshStandardMaterial({
+          map: destTex,
+          emissiveMap: destTex,
+          emissive: new THREE.Color(0xfff6d6),
+          emissiveIntensity: 0.45,
+          roughness: 0.25
+        })
+      );
+      destSign.rotation.y = -Math.PI / 2;
+      destSign.position.set(-0.19, 3.11, 0);
+      fGroup.add(destSign);
+
+      // 雨刷
+      const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.45, 0.025), matRubber);
+      wiper.position.set(-0.06, 2.45, -0.18);
+      wiper.rotation.x = 0.25;
+      fGroup.add(wiper);
+
+      // 2) 紅色「7514」車號牌
+      const numPlate = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.75, 0.2),
+        new THREE.MeshBasicMaterial({ map: frontNumTex, transparent: true })
+      );
+      numPlate.rotation.y = -Math.PI / 2;
+      numPlate.position.set(-0.05, 1.31, 0);
+      fGroup.add(numPlate);
+
+      // 3) 兩顆圓滾滾大眼頭燈
+      [-0.58, 0.58].forEach((hz) => {
+        const lampHousing = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.17, 0.19, 0.16, 24),
+          matChrome
+        );
+        lampHousing.rotation.z = Math.PI / 2;
+        lampHousing.position.set(-0.06, 1.01, hz);
+        fGroup.add(lampHousing);
+
+        const bulbMat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0xfff0b3,
+          emissiveIntensity: 1.4,
+          roughness: 0.1
+        });
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.135, 16, 16), bulbMat);
+        bulb.position.set(-0.11, 1.01, hz);
+        fGroup.add(bulb);
+        headlightBulbs.push(bulbMat);
+      });
+
+      // 4) 中央「6 號系統」看板
+      const routeBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.52, 0.38),
+        new THREE.MeshStandardMaterial({ map: route6Tex, roughness: 0.35 })
+      );
+      routeBoard.position.set(-0.07, 0.93, 0);
+      routeBoard.castShadow = true;
+      fGroup.add(routeBoard);
+
+      // 5) 下巴三條卡通通風飾條與紅色菱形徽章
+      [0.48, 0.57, 0.66].forEach((gy, i) => {
+        const grille = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.032, 1.35 - i * 0.08),
+          matTramYellow
+        );
+        grille.position.set(-0.05, gy, 0);
+        fGroup.add(grille);
+      });
+
+      [-0.86, -0.7].forEach((dz) => {
+        const diamond = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.08, 0.08),
+          matTramRed
+        );
+        diamond.rotation.x = Math.PI / 4;
+        diamond.position.set(-0.04, 0.54, dz);
+        fGroup.add(diamond);
+      });
+
+      // 6) 車頭底部黃色立體網格排障器（貼近軌道上方）
+      const fenderGroup = new THREE.Group();
+      fenderGroup.position.set(-0.02, 0.06, 0);
+
+      const fenderCurve = new THREE.CurvePath();
+      const fw = 0.76;
+      const fd = 0.32;
+      const cr = 0.14;
+
+      fenderCurve.add(new THREE.LineCurve3(
+        new THREE.Vector3(0.08, 0, -fw),
+        new THREE.Vector3(-fd + cr, 0, -fw)
+      ));
+      fenderCurve.add(new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(-fd + cr, 0, -fw),
+        new THREE.Vector3(-fd, 0, -fw),
+        new THREE.Vector3(-fd, 0, -fw + cr)
+      ));
+      fenderCurve.add(new THREE.LineCurve3(
+        new THREE.Vector3(-fd, 0, -fw + cr),
+        new THREE.Vector3(-fd, 0, fw - cr)
+      ));
+      fenderCurve.add(new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(-fd, 0, fw - cr),
+        new THREE.Vector3(-fd, 0, fw),
+        new THREE.Vector3(-fd + cr, 0, fw)
+      ));
+      fenderCurve.add(new THREE.LineCurve3(
+        new THREE.Vector3(-fd + cr, 0, fw),
+        new THREE.Vector3(0.08, 0, fw)
+      ));
+
+      const tubeGeo = new THREE.TubeGeometry(fenderCurve, 36, 0.022, 10, false);
+      [0, 0.11, 0.22].forEach((fy) => {
+        const bar = new THREE.Mesh(tubeGeo, matTramYellow);
+        bar.position.y = fy;
+        bar.castShadow = true;
+        fenderGroup.add(bar);
+      });
+
+      [-0.56, -0.28, 0, 0.28, 0.56].forEach((vz) => {
+        const vBar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.018, 0.26, 8),
+          matTramYellow
+        );
+        vBar.position.set(-fd, 0.11, vz);
+        vBar.castShadow = true;
+        fenderGroup.add(vBar);
+      });
+
+      [-fw, fw].forEach((sz) => {
+        const sidePost = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.018, 0.26, 8),
+          matTramYellow
+        );
+        sidePost.position.set(-0.08, 0.11, sz);
+        fenderGroup.add(sidePost);
+      });
+
+      [-0.45, 0.45].forEach((bz) => {
+        const hanger = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8),
+          matSteelDark
+        );
+        hanger.rotation.z = -0.45;
+        hanger.position.set(-0.12, 0.26, bz);
+        fenderGroup.add(hanger);
+      });
+
+      fGroup.add(fenderGroup);
+    }
+
+    function buildSideDetails(L, W) {
+      const sideNumTex = makeCanvasTex(256, 96, (ctx, w, h) => {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#991b1b';
+        ctx.font = 'bold 54px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('7514', w / 2, h / 2);
+      });
+
+      const sidePlate = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.75, 0.28),
+        new THREE.MeshBasicMaterial({ map: sideNumTex, transparent: true })
+      );
+      sidePlate.position.set(0.65, 1.0, W / 2 + 0.055);
+      bodyGroup.add(sidePlate);
+
+      const infoTag = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.22, 0.03),
+        new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.4 })
+      );
+      infoTag.position.set(-1.15, 1.18, W / 2 + 0.05);
+      bodyGroup.add(infoTag);
+    }
+
+    function buildRoofAndPantograph() {
+      const roofTopY = 3.31;
+
+      [-2.8, -1.2, 1.6, 3.0].forEach((vx) => {
+        const vent = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.14, 0.12, 16),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4, metalness: 0.6 })
+        );
+        vent.position.set(vx, roofTopY + 0.04, 0);
+        vent.castShadow = true;
+        bodyGroup.add(vent);
+      });
+
+      const pantoBase = new THREE.Group();
+      pantoBase.position.set(0.35, roofTopY + 0.05, 0);
+      bodyGroup.add(pantoBase);
+
+      const baseFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.95, 0.12, 0.85),
+        matSteelDark
+      );
+      baseFrame.castShadow = true;
+      pantoBase.add(baseFrame);
+
+      pantographLowerGroup = new THREE.Group();
+      pantographLowerGroup.position.set(0, 0.08, 0);
+      pantoBase.add(pantographLowerGroup);
+
+      [-0.32, 0.32].forEach((pz) => {
+        const lowerArm = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.022, 0.026, 1.05, 10),
+          matChrome
+        );
+        lowerArm.position.set(0.26, 0.42, pz);
+        lowerArm.rotation.z = -0.58;
+        lowerArm.castShadow = true;
+        pantographLowerGroup.add(lowerArm);
+      });
+
+      pantographUpperGroup = new THREE.Group();
+      pantographUpperGroup.position.set(0.54, 0.84, 0);
+      pantographLowerGroup.add(pantographUpperGroup);
+
+      [-0.26, 0.26].forEach((pz) => {
+        const upperArm = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.022, 1.02, 10),
+          matChrome
+        );
+        upperArm.position.set(-0.28, 0.42, pz);
+        upperArm.rotation.z = 0.62;
+        upperArm.castShadow = true;
+        pantographUpperGroup.add(upperArm);
+      });
+
+      const collectorHead = new THREE.Group();
+      collectorHead.position.set(-0.56, 0.84, 0);
+      pantographUpperGroup.add(collectorHead);
+
+      [-0.08, 0.08].forEach((cx) => {
+        const bar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.018, 0.018, 1.28, 12),
+          matChrome
+        );
+        bar.rotation.x = Math.PI / 2;
+        bar.position.set(cx, 0, 0);
+        bar.castShadow = true;
+        collectorHead.add(bar);
+      });
+    }
+    buildCartoonTram();
+
+    // --- 7. 建立「南佐久間町」復古站牌 ---
+    const stopSignGroup = new THREE.Group();
+    stopSignGroup.position.set(-4.35, 0.28, -2.05);
+    scene.add(stopSignGroup);
+
+    function buildStopSign() {
+      const concreteCyl = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.46, 0.48, 1.08, 28),
+        new THREE.MeshStandardMaterial({ map: hazardTex, roughness: 0.88 })
+      );
+      concreteCyl.position.set(-0.22, 0.54, 0.08);
+      concreteCyl.rotation.y = 0.6;
+      concreteCyl.castShadow = true;
+      concreteCyl.receiveShadow = true;
+      stopSignGroup.add(concreteCyl);
+
+      const sideBlock = new THREE.Mesh(
+        new THREE.BoxGeometry(0.62, 0.94, 0.68),
+        new THREE.MeshStandardMaterial({ color: 0xe7dfd3, roughness: 0.85 })
+      );
+      sideBlock.position.set(0.36, 0.47, -0.02);
+      sideBlock.castShadow = true;
+      sideBlock.receiveShadow = true;
+      stopSignGroup.add(sideBlock);
+
+      const greenMetal = new THREE.MeshPhysicalMaterial({
+        color: 0x7fa38c,
+        roughness: 0.36,
+        metalness: 0.25,
+        clearcoat: 0.35
+      });
+
+      const signColumn = new THREE.Group();
+      signColumn.position.set(-0.22, 0, 0.08);
+      stopSignGroup.add(signColumn);
+
+      const flange = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.26, 0.24, 18),
+        greenMetal
+      );
+      flange.position.y = 1.18;
+      flange.castShadow = true;
+      signColumn.add(flange);
+
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.068, 0.068, 0.52, 16),
+        greenMetal
+      );
+      pole.position.y = 1.5;
+      pole.castShadow = true;
+      signColumn.add(pole);
+
+      const boxW = 0.76;
+      const boxD = 0.34;
+      const boxH = 1.62;
+
+      const signBody = new THREE.Mesh(
+        new THREE.BoxGeometry(boxW, boxH, boxD),
+        greenMetal
+      );
+      signBody.position.y = 2.54;
+      signBody.castShadow = true;
+      signColumn.add(signBody);
+
+      const topCap = new THREE.Mesh(
+        new THREE.CylinderGeometry(boxW / 2, boxW / 2, boxD, 28, 1, false, 0, Math.PI),
+        greenMetal
+      );
+      topCap.rotation.x = Math.PI / 2;
+      topCap.rotation.y = Math.PI / 2;
+      topCap.position.y = 2.54 + boxH / 2;
+      topCap.castShadow = true;
+      signColumn.add(topCap);
+
+      const botCap = new THREE.Mesh(
+        new THREE.CylinderGeometry(boxW / 2, boxW / 2, boxD, 28, 1, false, Math.PI, Math.PI),
+        greenMetal
+      );
+      botCap.rotation.x = Math.PI / 2;
+      botCap.rotation.y = Math.PI / 2;
+      botCap.position.y = 2.54 - boxH / 2;
+      signColumn.add(botCap);
+
+      const frontFaceMat = new THREE.MeshStandardMaterial({ map: stopWideFrontTex, roughness: 0.3 });
+      [boxD / 2 + 0.004, -boxD / 2 - 0.004].forEach((fz) => {
+        const widePanel = new THREE.Mesh(new THREE.PlaneGeometry(boxW - 0.04, boxH + 0.28), frontFaceMat);
+        widePanel.rotation.y = fz > 0 ? 0 : Math.PI;
+        widePanel.position.set(0, 2.66, fz);
+        signColumn.add(widePanel);
+      });
+
+      const sideFaceMat = new THREE.MeshStandardMaterial({ map: stopNarrowSideTex, roughness: 0.3 });
+      [-boxW / 2 - 0.004, boxW / 2 + 0.004].forEach((sx) => {
+        const narrowPanel = new THREE.Mesh(new THREE.PlaneGeometry(boxD - 0.03, boxH + 0.06), sideFaceMat);
+        narrowPanel.rotation.y = sx < 0 ? -Math.PI / 2 : Math.PI / 2;
+        narrowPanel.position.set(sx, 2.56, 0);
+        signColumn.add(narrowPanel);
+      });
+    }
+    buildStopSign();
+
+    // --- 8. 建立銅綠復古看板建築與卡通蓬鬆樹林 ---
+    function buildBackgroundScenery() {
+      const bgGroup = new THREE.Group();
+
+      const buildingGroup = new THREE.Group();
+      buildingGroup.position.set(-5.8, 0, -6.5);
+      buildingGroup.rotation.y = 0.22;
+
+      const copperMat = new THREE.MeshStandardMaterial({
+        map: copperPatinaTex,
+        roughness: 0.62,
+        metalness: 0.35
+      });
+
+      const mainBlock = new THREE.Mesh(new THREE.BoxGeometry(5.6, 4.8, 4.2), copperMat);
+      mainBlock.position.y = 2.4;
+      mainBlock.castShadow = true;
+      mainBlock.receiveShadow = true;
+      buildingGroup.add(mainBlock);
+
+      const archTop = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.5, 4.24, 24, 1, false, 0, Math.PI),
+        copperMat
+      );
+      archTop.rotation.x = Math.PI / 2;
+      archTop.rotation.z = Math.PI / 2;
+      archTop.position.set(-0.5, 4.8, 0);
+      archTop.castShadow = true;
+      buildingGroup.add(archTop);
+
+      [-1.4, 0.8].forEach((wx) => {
+        const winFrame = new THREE.Mesh(
+          new THREE.BoxGeometry(1.05, 1.45, 0.15),
+          new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.5 })
+        );
+        winFrame.position.set(wx, 3.1, 2.1);
+        buildingGroup.add(winFrame);
+
+        const winGlass = new THREE.Mesh(
+          new THREE.BoxGeometry(0.85, 1.25, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.2, metalness: 0.5 })
+        );
+        winGlass.position.set(wx, 3.1, 2.1);
+        buildingGroup.add(winGlass);
+      });
+
+      const noren = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45, 0.85, 0.08),
+        matTramRed
+      );
+      noren.position.set(1.6, 1.5, 2.2);
+      buildingGroup.add(noren);
+
+      bgGroup.add(buildingGroup);
+
+      const foliageColors = [0x388e3c, 0x4caf50, 0x66bb6a, 0x2e7d32, 0x81c784];
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
+
+      function createCartoonTree(x, z, scale = 1, isPine = false) {
+        const tree = new THREE.Group();
+        tree.position.set(x, 0, z);
+
+        const trunkH = isPine ? 4.4 * scale : 2.6 * scale;
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18 * scale, 0.3 * scale, trunkH, 10),
+          trunkMat
+        );
+        trunk.position.y = trunkH / 2;
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        const puffCount = isPine ? 6 : 7;
+        for (let i = 0; i < puffCount; i++) {
+          const mat = new THREE.MeshStandardMaterial({
+            color: foliageColors[(i + Math.floor(Math.abs(x))) % foliageColors.length],
+            roughness: 0.78
+          });
+          const radius = (isPine ? 1.15 : 1.55) * scale * (0.8 + (i % 3) * 0.16);
+          const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 2), mat);
+          const angle = (i / puffCount) * Math.PI * 2;
+          const spread = (isPine ? 0.95 : 1.1) * scale;
+          puff.position.set(
+            Math.cos(angle) * spread * (i === 0 ? 0 : 1),
+            trunkH + (i % 3) * 0.75 * scale,
+            Math.sin(angle) * spread * (i === 0 ? 0 : 1)
+          );
+          puff.castShadow = true;
+          puff.receiveShadow = true;
+          tree.add(puff);
+        }
+        return tree;
+      }
+
+      bgGroup.add(createCartoonTree(-2.4, -3.6, 1.25, true));
+      const treePositions = [
+        [-11, -7.2, 1.4], [-3.0, -6.8, 1.5], [1.4, -5.6, 1.65],
+        [5.4, -5.2, 1.75], [9.6, -5.8, 1.6], [13.5, -6.2, 1.45]
+      ];
+      treePositions.forEach(([tx, tz, sc]) => {
+        bgGroup.add(createCartoonTree(tx, tz, sc, false));
+      });
+
+      scene.add(bgGroup);
+    }
+    buildBackgroundScenery();
+
+    // --- 9. 互動控制、預設收合選單與電車發車／進站系統 ---
+    const menuToggleBtn = document.getElementById('menu-toggle');
+    const controlsPanel = document.getElementById('controls-panel');
+    const statusText = document.getElementById('status-text');
+    const btnDepart = document.getElementById('btn-depart');
+
+    let isMenuOpen = false;
+    menuToggleBtn.addEventListener('click', () => {
+      isMenuOpen = !isMenuOpen;
+      controlsPanel.classList.toggle('collapsed', !isMenuOpen);
+      menuToggleBtn.textContent = isMenuOpen ? '✕ 收合選單' : '⚙️ 情境選單';
+    });
+
+    const cameraPresets = {
+      default: { pos: new THREE.Vector3(-8.6, 3.4, 9.8),  target: new THREE.Vector3(-0.9, 1.8, -0.1) },
+      front:   { pos: new THREE.Vector3(-7.6, 1.45, 2.8), target: new THREE.Vector3(-3.0, 0.85, 0.5) },
+      stop:    { pos: new THREE.Vector3(-6.8, 2.5, 1.6),  target: new THREE.Vector3(-4.4, 2.0, -2.0) },
+      bogie:   { pos: new THREE.Vector3(-2.6, 1.0, 4.4),  target: new THREE.Vector3(-1.45, 0.55, 1.4) }
+    };
+
+    let targetCamPos = null;
+    let targetLookAt = null;
+    let pantoRaised = true;
+    let idleAnimEnabled = true;
+
+    document.querySelectorAll('[data-cam]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-cam]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const preset = cameraPresets[btn.dataset.cam];
+        if (preset) {
+          targetCamPos = preset.pos.clone();
+          targetLookAt = preset.target.clone();
+        }
+      });
+    });
+
+    controls.addEventListener('start', () => {
+      targetCamPos = null;
+      targetLookAt = null;
+    });
+
+    const pantoBtn = document.getElementById('toggle-panto');
+    pantoBtn.addEventListener('click', () => {
+      pantoRaised = !pantoRaised;
+      pantoBtn.textContent = pantoRaised ? '集電弓：升起' : '集電弓：收合';
+    });
+
+    const animBtn = document.getElementById('toggle-anim');
+    animBtn.addEventListener('click', () => {
+      idleAnimEnabled = !idleAnimEnabled;
+      animBtn.textContent = idleAnimEnabled ? '微動待機：開' : '微動待機：關';
+      animBtn.classList.toggle('active', idleAnimEnabled);
+    });
+
+    // 電車行駛狀態機：'stopped' | 'departing' | 'arriving'
+    let tramState = 'stopped';
+    let tramSpeed = 0;       // 單位：公尺/秒（向左行駛時 X 遞減）
+    let bodyPitch = 0;       // 加減速時的車身前後俯仰角
+    const MAX_SPEED = 9.5;
+    const EXIT_LEFT_X = -25.0;
+    const ENTER_RIGHT_X = 26.0;
+
+    btnDepart.addEventListener('click', () => {
+      if (tramState !== 'stopped') return;
+      tramState = 'departing';
+      tramSpeed = 0;
+      btnDepart.disabled = true;
+      btnDepart.textContent = '🚃 行駛中...';
+      statusText.textContent = '狀態：發車離站中（駛向新橋）';
+    });
+
+    // --- 10. 動畫迴圈與視窗自適應 ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const t = clock.elapsedTime;
+
+      // 鏡頭平滑切換
+      if (targetCamPos && targetLookAt) {
+        camera.position.lerp(targetCamPos, 0.08);
+        controls.target.lerp(targetLookAt, 0.08);
+        if (camera.position.distanceTo(targetCamPos) < 0.03) {
+          targetCamPos = null;
+          targetLookAt = null;
+        }
+      }
+
+      // 電車離站與進站邏輯
+      let targetPitch = 0;
+      if (tramState === 'departing') {
+        // 頭燈增亮提示發車
+        headlightBulbs.forEach((m) => { m.emissiveIntensity = 2.2; });
+        tramSpeed = Math.min(MAX_SPEED, tramSpeed + 3.4 * dt);
+        tramGroup.position.x -= tramSpeed * dt;
+        targetPitch = -0.012 * (tramSpeed / MAX_SPEED); // 起步微仰
+
+        if (tramGroup.position.x <= EXIT_LEFT_X) {
+          // 離開畫面左側後，切換至畫面右側準備進站靠站
+          tramGroup.position.x = ENTER_RIGHT_X;
+          tramState = 'arriving';
+          statusText.textContent = '狀態：下一班次進站靠站中';
+        }
+      } else if (tramState === 'arriving') {
+        const distToStop = tramGroup.position.x - STOP_POS_X;
+        if (distToStop > 0.015) {
+          // 距離月台 11 公尺內開始平穩減速
+          const desiredSpeed = distToStop < 11.0
+            ? Math.max(0.55, (distToStop / 11.0) * MAX_SPEED)
+            : MAX_SPEED;
+          const prevSpeed = tramSpeed;
+          tramSpeed += (desiredSpeed - tramSpeed) * Math.min(1, 4.5 * dt);
+          tramGroup.position.x -= Math.min(distToStop, tramSpeed * dt);
+          if (tramSpeed < prevSpeed) {
+            targetPitch = 0.014 * (tramSpeed / MAX_SPEED); // 煞車微點頭
+          }
+        } else {
+          // 精準停靠站牌
+          tramGroup.position.x = STOP_POS_X;
+          tramSpeed = 0;
+          tramState = 'stopped';
+          btnDepart.disabled = false;
+          btnDepart.textContent = '▶️ 啟動發車';
+          statusText.textContent = '狀態：停靠月台待機中';
+          headlightBulbs.forEach((m) => { m.emissiveIntensity = 1.4; });
+        }
+      }
+
+      // 車輪依實際移動距離同步轉動
+      if (tramSpeed > 0.001) {
+        const wheelAngDelta = (tramSpeed * dt) / 0.26;
+        wheelMeshes.forEach((w) => {
+          w.rotation.y += wheelAngDelta;
+        });
+      }
+
+      // 車體微動呼吸與加減速俯仰
+      bodyPitch += (targetPitch - bodyPitch) * 0.1;
+      if (idleAnimEnabled) {
+        const vibAmp = tramState === 'stopped' ? 0.011 : 0.018;
+        const vibFreq = tramState === 'stopped' ? 2.4 : 14.0;
+        bodyGroup.position.y = Math.sin(t * vibFreq) * vibAmp;
+        bodyGroup.rotation.z = bodyPitch + Math.sin(t * 1.6) * 0.003;
+      } else {
+        bodyGroup.position.y = 0;
+        bodyGroup.rotation.z = bodyPitch;
+      }
+
+      // 集電弓平滑開合
+      if (pantographLowerGroup && pantographUpperGroup) {
+        const targetLowerAngle = pantoRaised ? 0 : -0.68;
+        const targetUpperAngle = pantoRaised ? 0 : 1.32;
+        pantographLowerGroup.rotation.z += (targetLowerAngle - pantographLowerGroup.rotation.z) * 0.08;
+        pantographUpperGroup.rotation.z += (targetUpperAngle - pantographUpperGroup.rotation.z) * 0.08;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
